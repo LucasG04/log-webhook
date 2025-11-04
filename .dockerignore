@@ -1,0 +1,17 @@
+# Go
+/bin
+/build
+/dist
+*.out
+*.test
+
+# Modules
+vendor
+**/*.sum
+
+# VCS / Editors
+.git
+.gitignore
+.idea
+.vscode
+.DS_Store
