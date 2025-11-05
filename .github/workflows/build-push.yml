@@ -25,7 +25,7 @@ jobs:
         with:
           images: ghcr.io/lucasg04/log-webhook
           tags: |
-            type=ref,event=tag
+            type=semver,pattern={{version}}
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Log in to Container Registry
