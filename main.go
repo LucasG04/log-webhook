@@ -2,12 +2,14 @@ package main
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 )
 
 // createLogHandler creates the log webhook handler
@@ -18,8 +20,23 @@ func createLogHandler() http.HandlerFunc {
 
 		defer r.Body.Close()
 
+		// Create a reader that may need gzip decompression
+		var reader io.Reader = r.Body
+
+		// Check if the request body is gzip-encoded
+		if strings.Contains(strings.ToLower(r.Header.Get("Content-Encoding")), "gzip") {
+			gzipReader, err := gzip.NewReader(r.Body)
+			if err != nil {
+				log.Printf("Error creating gzip reader: %v", err)
+				http.Error(w, `{"error":"Failed to create gzip reader"}`, http.StatusBadRequest)
+				return
+			}
+			defer gzipReader.Close()
+			reader = gzipReader
+		}
+
 		// Read request body
-		body, err := io.ReadAll(r.Body)
+		body, err := io.ReadAll(reader)
 		if err != nil {
 			log.Printf("Error reading request body: %v", err)
 			http.Error(w, `{"error":"Failed to read request body"}`, http.StatusBadRequest)

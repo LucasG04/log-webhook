@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -330,5 +331,82 @@ func TestHealthCheckEndpoint(t *testing.T) {
 	contentType := rr.Header().Get("Content-Type")
 	if contentType != "application/json" {
 		t.Errorf("expected Content-Type application/json, got %s", contentType)
+	}
+}
+
+func TestLogWebhookHandlerWithGzip(t *testing.T) {
+	tests := []struct {
+		name           string
+		requestBody    string
+		useGzip        bool
+		expectedStatus int
+		expectError    bool
+	}{
+		{
+			name:           "valid json with gzip compression",
+			requestBody:    `{"service": "test", "message": "hello from gzip"}`,
+			useGzip:        true,
+			expectedStatus: http.StatusOK,
+			expectError:    false,
+		},
+		{
+			name:           "valid json without gzip",
+			requestBody:    `{"service": "test", "message": "hello without gzip"}`,
+			useGzip:        false,
+			expectedStatus: http.StatusOK,
+			expectError:    false,
+		},
+		{
+			name:           "invalid json with gzip",
+			requestBody:    `{"service": "test", "message": }`,
+			useGzip:        true,
+			expectedStatus: http.StatusBadRequest,
+			expectError:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var req *http.Request
+
+			if tt.useGzip {
+				// Create gzipped request body
+				var buf bytes.Buffer
+				writer := gzip.NewWriter(&buf)
+				_, err := writer.Write([]byte(tt.requestBody))
+				if err != nil {
+					t.Fatalf("failed to write to gzip writer: %v", err)
+				}
+				err = writer.Close()
+				if err != nil {
+					t.Fatalf("failed to close gzip writer: %v", err)
+				}
+
+				req = httptest.NewRequest(http.MethodPost, "/v1/logs", &buf)
+				req.Header.Set("Content-Encoding", "gzip")
+			} else {
+				req = httptest.NewRequest(http.MethodPost, "/v1/logs", strings.NewReader(tt.requestBody))
+			}
+
+			req.Header.Set("Content-Type", "application/json")
+
+			rr := httptest.NewRecorder()
+			handler := createLogHandler()
+			handler.ServeHTTP(rr, req)
+
+			if rr.Code != tt.expectedStatus {
+				t.Errorf("handler returned wrong status code: got %v want %v", rr.Code, tt.expectedStatus)
+			}
+
+			if tt.expectError {
+				if !strings.Contains(rr.Body.String(), "error") {
+					t.Errorf("expected error response, got %v", rr.Body.String())
+				}
+			} else {
+				if !strings.Contains(rr.Body.String(), "success") {
+					t.Errorf("expected success response, got %v", rr.Body.String())
+				}
+			}
+		})
 	}
 }
