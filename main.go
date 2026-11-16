@@ -1,88 +1,114 @@
 package main
 
 import (
-	"bytes"
-	"compress/gzip"
-	"encoding/json"
+	"context"
+	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
-	"strings"
+	"os/signal"
+	"strconv"
+	"syscall"
+	"time"
 )
 
-// createLogHandler creates the log webhook handler
-func createLogHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// Set response headers
-		w.Header().Set("Content-Type", "application/json")
+const shutdownTimeout = 20 * time.Second
 
-		defer r.Body.Close()
-
-		// Create a reader that may need gzip decompression
-		var reader io.Reader = r.Body
-
-		// Check if the request body is gzip-encoded
-		if strings.Contains(strings.ToLower(r.Header.Get("Content-Encoding")), "gzip") {
-			gzipReader, err := gzip.NewReader(r.Body)
-			if err != nil {
-				log.Printf("Error creating gzip reader: %v", err)
-				http.Error(w, `{"error":"Failed to create gzip reader"}`, http.StatusBadRequest)
-				return
-			}
-			defer gzipReader.Close()
-			reader = gzipReader
-		}
-
-		// Read request body
-		body, err := io.ReadAll(reader)
-		if err != nil {
-			log.Printf("Error reading request body: %v", err)
-			http.Error(w, `{"error":"Failed to read request body"}`, http.StatusBadRequest)
-			return
-		}
-
-		// Validate and compact JSON
-		compactedJSON := &bytes.Buffer{}
-		if err := json.Compact(compactedJSON, body); err != nil {
-			log.Printf("Invalid JSON received: %v", err)
-			http.Error(w, `{"error":"Invalid JSON format"}`, http.StatusBadRequest)
-			return
-		}
-
-		// Log the compacted JSON
-		fmt.Println(compactedJSON.String())
-
-		// Send success response
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, `{"status":"success"}`)
+func main() {
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil)).With("component", "log-webhook")
+	if err := run(logger); err != nil {
+		logger.Error("fatal", "error", err.Error())
+		os.Exit(1)
 	}
 }
 
-func main() {
-	// Get configuration from environment variables with defaults
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
+func run(logger *slog.Logger) error {
+	maxBody, err := envInt("MAX_BODY_BYTES", 10<<20)
+	if err != nil {
+		return err
+	}
+	if maxBody <= 0 {
+		return errors.New("MAX_BODY_BYTES must be positive")
+	}
+	maxMessage, err := envInt("MAX_MESSAGE_BYTES", 16384)
+	if err != nil {
+		return err
+	}
+	port := envOr("PORT", "8080")
+	endpoint := envOr("LOG_ENDPOINT", "/v1/logs")
+
+	h := &LogHandler{
+		Out:             os.Stdout,
+		MaxBodyBytes:    int64(maxBody),
+		MaxMessageBytes: maxMessage,
+		FieldPrefix:     os.Getenv("FIELD_PREFIX"),
+		Logger:          logger,
+		Now:             time.Now,
 	}
 
-	endpoint := os.Getenv("LOG_ENDPOINT")
-	if endpoint == "" {
-		endpoint = "/v1/logs"
+	srv := &http.Server{
+		Addr:              ":" + port,
+		Handler:           newMux(endpoint, h),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		ErrorLog:          slog.NewLogLogger(logger.Handler(), slog.LevelWarn),
 	}
 
-	// Create HTTP server with timeouts
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
+	defer stop()
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- srv.ListenAndServe() }()
+	logger.Info("listening", "port", port, "endpoint", endpoint)
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+	}
+
+	logger.Info("shutting down")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		return err
+	}
+	if err := <-errCh; !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	logger.Info("stopped")
+	return nil
+}
+
+func newMux(endpoint string, h http.Handler) *http.ServeMux {
 	mux := http.NewServeMux()
-	mux.HandleFunc(endpoint, createLogHandler())
-
-	// Add health check endpoint
+	mux.Handle(endpoint, h)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, `{"status":"healthy"}`)
+		io.WriteString(w, `{"status":"healthy"}`)
 	})
+	return mux
+}
 
-	log.Printf("log-webhook listening on :%s at endpoint %s", port, endpoint)
-	log.Fatal(http.ListenAndServe(":"+port, mux))
+func envOr(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
+func envInt(key string, def int) (int, error) {
+	v := os.Getenv(key)
+	if v == "" {
+		return def, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s: %w", key, err)
+	}
+	return n, nil
 }
