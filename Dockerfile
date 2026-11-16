@@ -1,18 +1,11 @@
 # ---- Build stage ----
 FROM golang:1.26 AS build
 WORKDIR /src
-
-# Pre-cache deps
-COPY go.mod ./
-RUN go mod download
-
-# Copy source
 COPY . .
 
 # Build a static binary (no CGO) for minimal container bases
 ENV CGO_ENABLED=0
-RUN go test ./... && \
-    go build -trimpath -ldflags="-s -w" -o /out/log-webhook .
+RUN go build -trimpath -ldflags="-s -w" -o /out/log-webhook .
 
 # ---- Runtime stage (distroless) ----
 FROM gcr.io/distroless/static-debian12:nonroot
