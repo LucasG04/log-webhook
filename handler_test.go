@@ -155,7 +155,7 @@ func TestHandlerRecoversAfterWriteError(t *testing.T) {
 }
 
 func TestHandlerOutputLine(t *testing.T) {
-	want := `{"timestamp":"2026-11-16T11:16:38.823Z","level":"ERROR","severityNumber":17,"message":"Version \"develop\" from localstorage not valid","service":"donkey-frontend","scope":"donkey-frontend","resource":{"service.name":"donkey-frontend"},"attributes":{"version":"develop"}}`
+	want := `{"timestamp":"2026-11-16T11:16:38.823Z","level":"ERROR","severityNumber":17,"message":"Version \"develop\" from localstorage not valid","service":"example-frontend","scope":"example-frontend","resource":{"service.name":"example-frontend"},"attributes":{"version":"develop"}}`
 	for _, prefix := range []string{"", "otel"} {
 		t.Run("prefix="+prefix, func(t *testing.T) {
 			h, out, _ := newTestHandler(prefix)

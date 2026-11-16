@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const fixture = `{"resourceLogs":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"donkey-frontend"}}]},"scopeLogs":[{"scope":{"name":"donkey-frontend"},"logRecords":[{"timeUnixNano":"1794827798817000000","observedTimeUnixNano":"1794827798817000000","severityNumber":9,"severityText":"INFO","body":{"stringValue":"User DONKEYKOORD1 logged in"}},{"timeUnixNano":"1794827798823000000","observedTimeUnixNano":"1794827798823000000","severityNumber":17,"severityText":"ERROR","body":{"stringValue":"Version \"develop\" from localstorage not valid"},"attributes":[{"key":"version","value":{"stringValue":"develop"}}]}]}]}]}`
+const fixture = `{"resourceLogs":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"example-frontend"}}]},"scopeLogs":[{"scope":{"name":"example-frontend"},"logRecords":[{"timeUnixNano":"1794827798817000000","observedTimeUnixNano":"1794827798817000000","severityNumber":9,"severityText":"INFO","body":{"stringValue":"User EXAMPLEUSER1 logged in"}},{"timeUnixNano":"1794827798823000000","observedTimeUnixNano":"1794827798823000000","severityNumber":17,"severityText":"ERROR","body":{"stringValue":"Version \"develop\" from localstorage not valid"},"attributes":[{"key":"version","value":{"stringValue":"develop"}}]}]}]}]}`
 
 var testNow = time.Date(2030, 1, 2, 3, 4, 5, 678_000_000, time.UTC)
 
@@ -22,16 +22,16 @@ func flattenJSON(t *testing.T, s string, maxMessageBytes int) []Record {
 }
 
 func TestFlattenFixture(t *testing.T) {
-	res := map[string]string{"service.name": "donkey-frontend"}
+	res := map[string]string{"service.name": "example-frontend"}
 	want := []Record{
 		{
 			Timestamp: "2026-11-16T11:16:38.817Z", Level: "INFO", SeverityNumber: 9,
-			Message: "User DONKEYKOORD1 logged in", Service: "donkey-frontend", Scope: "donkey-frontend",
+			Message: "User EXAMPLEUSER1 logged in", Service: "example-frontend", Scope: "example-frontend",
 			Resource: res,
 		},
 		{
 			Timestamp: "2026-11-16T11:16:38.823Z", Level: "ERROR", SeverityNumber: 17,
-			Message: `Version "develop" from localstorage not valid`, Service: "donkey-frontend", Scope: "donkey-frontend",
+			Message: `Version "develop" from localstorage not valid`, Service: "example-frontend", Scope: "example-frontend",
 			Resource: res, Attributes: map[string]string{"version": "develop"},
 		},
 	}

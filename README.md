@@ -5,7 +5,7 @@ Stdlib-only Go webhook that receives OTLP/JSON log exports (e.g. Collector `otlp
 ## Output
 
 ```json
-{"timestamp":"2026-11-16T11:16:38.823Z","level":"ERROR","severityNumber":17,"message":"Version \"develop\" from localstorage not valid","service":"donkey-frontend","scope":"donkey-frontend","resource":{"service.name":"donkey-frontend"},"attributes":{"version":"develop"}}
+{"timestamp":"2026-11-16T11:16:38.823Z","level":"ERROR","severityNumber":17,"message":"Version \"develop\" from localstorage not valid","service":"example-frontend","scope":"example-frontend","resource":{"service.name":"example-frontend"},"attributes":{"version":"develop"}}
 ```
 
 - `timestamp`: `timeUnixNano` → `observedTimeUnixNano` → receive time (RFC 3339, UTC, ms)
