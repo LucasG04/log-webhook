@@ -37,3 +37,8 @@ go run .
 go test -race ./...
 docker build -t log-webhook . && docker run -p 8080:8080 log-webhook
 ```
+
+## CI
+
+- `test.yml`: runs `go test ./...` on push to `main`.
+- `release.yml`: on a `v*` tag (e.g. `v1.2.3`), builds a multi-arch image and pushes `ghcr.io/lucasg04/log-webhook:1.2.3` and `:latest`.
